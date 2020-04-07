@@ -1,3 +1,6 @@
+**WARNING**
+**This repository is a fork. It contains a fix for the import aliases**
+
 ![moq logo](moq-logo-small.png) [![Build Status](https://travis-ci.org/matryer/moq.svg?branch=master)](https://travis-ci.org/matryer/moq) [![Go Report Card](https://goreportcard.com/badge/github.com/matryer/moq)](https://goreportcard.com/report/github.com/matryer/moq)
 
 Interface mocking tool for go generate.
