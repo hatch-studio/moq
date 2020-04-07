@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"go/build"
+	"go/format"
 	"go/types"
 	"io"
 	"os"
@@ -16,24 +17,58 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
+// This list comes from the golint codebase. Golint will complain about any of
+// these being mixed-case, like "Id" instead of "ID".
+var golintInitialisms = []string{
+	"ACL",
+	"API",
+	"ASCII",
+	"CPU",
+	"CSS",
+	"DNS",
+	"EOF",
+	"GUID",
+	"HTML",
+	"HTTP",
+	"HTTPS",
+	"ID",
+	"IP",
+	"JSON",
+	"LHS",
+	"QPS",
+	"RAM",
+	"RHS",
+	"RPC",
+	"SLA",
+	"SMTP",
+	"SQL",
+	"SSH",
+	"TCP",
+	"TLS",
+	"TTL",
+	"UDP",
+	"UI",
+	"UID",
+	"UUID",
+	"URI",
+	"URL",
+	"UTF8",
+	"VM",
+	"XML",
+	"XMPP",
+	"XSRF",
+	"XSS",
+}
+
 // Mocker can generate mock structs.
 type Mocker struct {
 	srcPkg  *packages.Package
 	tmpl    *template.Template
 	pkgName string
 	pkgPath string
-	fmter   func(src []byte) ([]byte, error)
 
 	aliases map[string]string // path -> name
 	imports map[string]string // name -> path
-}
-
-// Config specifies details about how interfaces should be mocked.
-// SrcDir is the only field which needs be specified.
-type Config struct {
-	SrcDir    string
-	PkgName   string
-	Formatter string
 }
 
 // New makes a new Mocker for the specified package directory.
@@ -42,13 +77,7 @@ func New(src, packageName string) (*Mocker, error) {
 	if err != nil {
 		return nil, fmt.Errorf("couldn't load source package: %s", err)
 	}
-
-	pkgName := conf.PkgName
-	if pkgName == "" {
-		pkgName = srcPkg.Name
-	}
-
-	pkgPath, err := findPkgPath(conf.PkgName, srcPkg)
+	pkgPath, err := findPkgPath(packageName, srcPkg)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't load mock package: %s", err)
 	}
@@ -57,16 +86,10 @@ func New(src, packageName string) (*Mocker, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	fmter := gofmt
-	if conf.Formatter == "goimports" {
-		fmter = goimports
-	}
-
 	return &Mocker{
 		tmpl:    tmpl,
 		srcPkg:  srcPkg,
-		pkgName: pkgName,
+		pkgName: preventZeroStr(packageName, srcPkg.Name),
 		pkgPath: pkgPath,
 		aliases: extractAliases(srcPkg),
 		imports: make(map[string]string),
@@ -171,9 +194,9 @@ func (m *Mocker) Mock(w io.Writer, names ...string) error {
 	if err != nil {
 		return err
 	}
-	formatted, err := m.fmter(buf.Bytes())
+	formatted, err := format.Source(buf.Bytes())
 	if err != nil {
-		return err
+		return fmt.Errorf("go/format: %s", err)
 	}
 	if _, err := w.Write(formatted); err != nil {
 		return err
@@ -236,11 +259,12 @@ func (m *Mocker) extractArgs(sig *types.Signature, list *types.Tuple, nameFormat
 	return params
 }
 
-func pkgInfoFromPath(srcDir string, mode packages.LoadMode) (*packages.Package, error) {
-	pkgs, err := packages.Load(&packages.Config{
+func pkgInfoFromPath(src string, mode packages.LoadMode) (*packages.Package, error) {
+	conf := packages.Config{
 		Mode: mode,
-		Dir:  srcDir,
-	})
+		Dir:  src,
+	}
+	pkgs, err := packages.Load(&conf)
 	if err != nil {
 		return nil, err
 	}

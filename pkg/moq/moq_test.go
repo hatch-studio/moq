@@ -2,23 +2,15 @@ package moq
 
 import (
 	"bytes"
-	"flag"
-	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/pmezard/go-difflib/difflib"
 )
 
-var update = flag.Bool("update", false, "Update golden files.")
-
 func TestMoq(t *testing.T) {
-	m, err := New(Config{SrcDir: "testpackages/example"})
+	m, err := New("testpackages/example", "")
 	if err != nil {
 		t.Fatalf("moq.New: %s", err)
 	}
@@ -51,7 +43,7 @@ func TestMoq(t *testing.T) {
 }
 
 func TestMoqWithStaticCheck(t *testing.T) {
-	m, err := New(Config{SrcDir: "testpackages/example"})
+	m, err := New("testpackages/example", "")
 	if err != nil {
 		t.Fatalf("moq.New: %s", err)
 	}
@@ -85,7 +77,7 @@ func TestMoqWithStaticCheck(t *testing.T) {
 }
 
 func TestMoqWithAlias(t *testing.T) {
-	m, err := New(Config{SrcDir: "testpackages/example"})
+	m, err := New("testpackages/example", "")
 	if err != nil {
 		t.Fatalf("moq.New: %s", err)
 	}
@@ -118,7 +110,7 @@ func TestMoqWithAlias(t *testing.T) {
 }
 
 func TestMoqExplicitPackage(t *testing.T) {
-	m, err := New(Config{SrcDir: "testpackages/example", PkgName: "different"})
+	m, err := New("testpackages/example", "different")
 	if err != nil {
 		t.Fatalf("moq.New: %s", err)
 	}
@@ -145,7 +137,7 @@ func TestMoqExplicitPackage(t *testing.T) {
 }
 
 func TestMoqExplicitPackageWithStaticCheck(t *testing.T) {
-	m, err := New(Config{SrcDir: "testpackages/example", PkgName: "different"})
+	m, err := New("testpackages/example", "different")
 	if err != nil {
 		t.Fatalf("moq.New: %s", err)
 	}
@@ -173,7 +165,7 @@ func TestMoqExplicitPackageWithStaticCheck(t *testing.T) {
 }
 
 func TestNotCreatingEmptyDirWhenPkgIsGiven(t *testing.T) {
-	m, err := New(Config{SrcDir: "testpackages/example", PkgName: "different"})
+	m, err := New("testpackages/example", "different")
 	if err != nil {
 		t.Fatalf("moq.New: %s", err)
 	}
@@ -195,7 +187,7 @@ func TestNotCreatingEmptyDirWhenPkgIsGiven(t *testing.T) {
 // expected.
 // see https://github.com/matryer/moq/issues/5
 func TestVariadicArguments(t *testing.T) {
-	m, err := New(Config{SrcDir: "testpackages/variadic"})
+	m, err := New("testpackages/variadic", "")
 	if err != nil {
 		t.Fatalf("moq.New: %s", err)
 	}
@@ -220,7 +212,7 @@ func TestVariadicArguments(t *testing.T) {
 }
 
 func TestNothingToReturn(t *testing.T) {
-	m, err := New(Config{SrcDir: "testpackages/example"})
+	m, err := New("testpackages/example", "")
 	if err != nil {
 		t.Fatalf("moq.New: %s", err)
 	}
@@ -245,7 +237,7 @@ func TestNothingToReturn(t *testing.T) {
 }
 
 func TestChannelNames(t *testing.T) {
-	m, err := New(Config{SrcDir: "testpackages/channels"})
+	m, err := New("testpackages/channels", "")
 	if err != nil {
 		t.Fatalf("moq.New: %s", err)
 	}
@@ -266,7 +258,7 @@ func TestChannelNames(t *testing.T) {
 }
 
 func TestImports(t *testing.T) {
-	m, err := New(Config{SrcDir: "testpackages/imports/two"})
+	m, err := New("testpackages/imports/two", "")
 	if err != nil {
 		t.Fatalf("moq.New: %s", err)
 	}
@@ -325,7 +317,7 @@ func TestTemplateFuncs(t *testing.T) {
 }
 
 func TestVendoredPackages(t *testing.T) {
-	m, err := New(Config{SrcDir: "testpackages/vendoring/user"})
+	m, err := New("testpackages/vendoring/user", "")
 	if err != nil {
 		t.Fatalf("moq.New: %s", err)
 	}
@@ -347,10 +339,7 @@ func TestVendoredPackages(t *testing.T) {
 }
 
 func TestVendoredInterface(t *testing.T) {
-	m, err := New(Config{
-		SrcDir:  "testpackages/vendoring/vendor/github.com/matryer/somerepo",
-		PkgName: "someother",
-	})
+	m, err := New("testpackages/vendoring/vendor/github.com/matryer/somerepo", "someother")
 	if err != nil {
 		t.Fatalf("moq.New: %s", err)
 	}
@@ -376,7 +365,7 @@ func TestVendoredInterface(t *testing.T) {
 }
 
 func TestVendoredBuildConstraints(t *testing.T) {
-	m, err := New(Config{SrcDir: "testpackages/buildconstraints/user"})
+	m, err := New("testpackages/buildconstraints/user", "")
 	if err != nil {
 		t.Fatalf("moq.New: %s", err)
 	}
@@ -413,7 +402,7 @@ func TestDotImports(t *testing.T) {
 			t.Errorf("Chdir back: %s", err)
 		}
 	}()
-	m, err := New(Config{SrcDir: ".", PkgName: "moqtest_test"})
+	m, err := New(".", "moqtest_test")
 	if err != nil {
 		t.Fatalf("moq.New: %s", err)
 	}
@@ -429,7 +418,7 @@ func TestDotImports(t *testing.T) {
 }
 
 func TestEmptyInterface(t *testing.T) {
-	m, err := New(Config{SrcDir: "testpackages/emptyinterface"})
+	m, err := New("testpackages/emptyinterface", "")
 	if err != nil {
 		t.Fatalf("moq.New: %s", err)
 	}
@@ -473,7 +462,7 @@ func TestGoGenerateVendoredPackages(t *testing.T) {
 }
 
 func TestImportedPackageWithSameName(t *testing.T) {
-	m, err := New(Config{SrcDir: "testpackages/samenameimport"})
+	m, err := New("testpackages/samenameimport", "")
 	if err != nil {
 		t.Fatalf("moq.New: %s", err)
 	}
@@ -486,15 +475,4 @@ func TestImportedPackageWithSameName(t *testing.T) {
 	if !strings.Contains(s, `a samename.A`) {
 		t.Error("missing samename.A to address the struct A from the external package samename")
 	}
-}
-
-// normalize normalizes \r\n (windows) and \r (mac)
-// into \n (unix)
-func normalize(d []byte) []byte {
-	// Source: https://www.programming-books.io/essential/go/normalize-newlines-1d3abcf6f17c4186bb9617fa14074e48
-	// replace CR LF \r\n (windows) with LF \n (unix)
-	d = bytes.Replace(d, []byte{13, 10}, []byte{10}, -1)
-	// replace CF \r (mac) with LF \n (unix)
-	d = bytes.Replace(d, []byte{13}, []byte{10}, -1)
-	return d
 }

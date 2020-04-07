@@ -14,20 +14,18 @@ import (
 )
 
 type userFlags struct {
-	outFile   string
-	pkgName   string
-	formatter string
-	args      []string
+	outFile string
+	pkgName string
+	args    []string
 }
 
 func main() {
 	var flags userFlags
 	flag.StringVar(&flags.outFile, "out", "", "output file (default stdout)")
 	flag.StringVar(&flags.pkgName, "pkg", "", "package name (default will infer)")
-	flag.StringVar(&flags.formatter, "fmt", "", "go pretty-printer: gofmt (default) or goimports")
 
 	flag.Usage = func() {
-		fmt.Println(`moq [flags] source-dir interface [interface2 [interface3 [...]]]`)
+		fmt.Println(`moq [flags] destination interface [interface2 [interface3 [...]]]`)
 		flag.PrintDefaults()
 		fmt.Println(`Specifying an alias for the mock is also supported with the format 'interface:alias'`)
 		fmt.Println(`Ex: moq -pkg different . MyInterface:MyMock`)
@@ -54,12 +52,9 @@ func run(flags userFlags) error {
 		out = &buf
 	}
 
-	srcDir, args := flags.args[0], flags.args[1:]
-	m, err := moq.New(moq.Config{
-		SrcDir:    srcDir,
-		PkgName:   flags.pkgName,
-		Formatter: flags.formatter,
-	})
+	destination := flags.args[0]
+	args := flags.args[1:]
+	m, err := moq.New(destination, flags.pkgName)
 	if err != nil {
 		return err
 	}
