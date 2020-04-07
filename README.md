@@ -24,9 +24,7 @@ $ go get github.com/matryer/moq
 ### Usage
 
 ```
-moq [flags] source-dir interface [interface2 [interface3 [...]]]
-  -fmt string
-	go pretty-printer: gofmt (default) or goimports
+moq [flags] destination interface [interface2 [interface3 [...]]]
   -out string
     	output file (default stdout)
   -pkg string
@@ -34,9 +32,6 @@ moq [flags] source-dir interface [interface2 [interface3 [...]]]
 Specifying an alias for the mock is also supported with the format 'interface:alias'
 Ex: moq -pkg different . MyInterface:MyMock
 ```
-
-**NOTE:** `source-dir` is the directory where the source code (definition) of the target interface is located. 
-It needs to be a path to a directory and not the import statement for a Go package.
 
 In a command line:
 
