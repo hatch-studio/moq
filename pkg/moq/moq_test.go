@@ -278,6 +278,7 @@ func TestImports(t *testing.T) {
 	s := buf.String()
 	var strs = []string{
 		`	"sync"`,
+		`	another "github.com/matryer/moq/pkg/moq/testpackages/imports/another/one"`,
 		`	"github.com/matryer/moq/pkg/moq/testpackages/imports/one"`,
 	}
 	for _, str := range strs {
@@ -290,67 +291,30 @@ func TestImports(t *testing.T) {
 	}
 }
 
-func TestFormatter(t *testing.T) {
-	cases := []struct {
-		name string
-		conf Config
-	}{
-		{name: "gofmt", conf: Config{SrcDir: "testpackages/imports/two"}},
-		{name: "goimports", conf: Config{SrcDir: "testpackages/imports/two", Formatter: "goimports"}},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			m, err := New(tc.conf)
-			if err != nil {
-				t.Fatalf("moq.New: %s", err)
-			}
-			var buf bytes.Buffer
-			err = m.Mock(&buf, "DoSomething")
-			if err != nil {
-				t.Errorf("m.Mock: %s", err)
-			}
-
-			golden := filepath.Join("testpackages/imports/testdata", tc.name+".golden.go")
-			if err := matchGoldenFile(golden, buf.Bytes()); err != nil {
-				t.Errorf("check golden file: %s", err)
-			}
-		})
-	}
-}
-
-func matchGoldenFile(goldenFile string, actual []byte) error {
-	// To update golden files, run the following:
-	// go test -v -run ^<Test-Name>$ github.com/matryer/moq/pkg/moq -update
-	if *update {
-		if err := ioutil.WriteFile(goldenFile, actual, 0644); err != nil {
-			return fmt.Errorf("write: %s: %s", goldenFile, err)
-		}
-
-		return nil
-	}
-
-	expected, err := ioutil.ReadFile(goldenFile)
+func TestImportsConflict(t *testing.T) {
+	m, err := New("testpackages/imports/three", "")
 	if err != nil {
-		return fmt.Errorf("read: %s: %s", goldenFile, err)
+		t.Fatalf("moq.New: %s", err)
 	}
-
-	// Normalise newlines
-	actual, expected = normalize(actual), normalize(expected)
-	if !bytes.Equal(expected, actual) {
-		diff, err := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
-			A:        difflib.SplitLines(string(expected)),
-			B:        difflib.SplitLines(string(actual)),
-			FromFile: "Expected",
-			ToFile:   "Actual",
-			Context:  1,
-		})
-		if err != nil {
-			return fmt.Errorf("diff: %s", err)
+	var buf bytes.Buffer
+	err = m.Mock(&buf, "DoFirst", "DoAnother")
+	if err != nil {
+		t.Errorf("m.Mock: %s", err)
+	}
+	s := buf.String()
+	var strs = []string{
+		`	"sync"`,
+		`	"github.com/matryer/moq/pkg/moq/testpackages/imports/one"`,
+		`	one1 "github.com/matryer/moq/pkg/moq/testpackages/imports/another/one"`,
+	}
+	for _, str := range strs {
+		if !strings.Contains(s, str) {
+			t.Errorf("expected but missing: \"%s\"", str)
 		}
-		return fmt.Errorf("match: %s:\n%s", goldenFile, diff)
+		if len(strings.Split(s, str)) > 2 {
+			t.Errorf("more than one: \"%s\"", str)
+		}
 	}
-
-	return nil
 }
 
 func TestTemplateFuncs(t *testing.T) {
@@ -407,7 +371,7 @@ func TestVendoredInterface(t *testing.T) {
 	}
 	incorrectImport := `"github.com/matryer/moq/pkg/moq/testpackages/vendoring/vendor/github.com/matryer/somerepo"`
 	if strings.Contains(s, incorrectImport) {
-		t.Errorf("unexpected import: %s", incorrectImport)
+		t.Errorf("unexpected import: %s\n%s", incorrectImport, s)
 	}
 }
 

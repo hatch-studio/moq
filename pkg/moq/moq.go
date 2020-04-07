@@ -24,7 +24,8 @@ type Mocker struct {
 	pkgPath string
 	fmter   func(src []byte) ([]byte, error)
 
-	imports map[string]bool
+	aliases map[string]string // path -> name
+	imports map[string]string // name -> path
 }
 
 // Config specifies details about how interfaces should be mocked.
@@ -36,8 +37,8 @@ type Config struct {
 }
 
 // New makes a new Mocker for the specified package directory.
-func New(conf Config) (*Mocker, error) {
-	srcPkg, err := pkgInfoFromPath(conf.SrcDir, packages.NeedName|packages.NeedTypes|packages.NeedTypesInfo)
+func New(src, packageName string) (*Mocker, error) {
+	srcPkg, err := pkgInfoFromPath(src, packages.NeedName|packages.NeedSyntax|packages.NeedTypes|packages.NeedTypesInfo)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't load source package: %s", err)
 	}
@@ -67,9 +68,28 @@ func New(conf Config) (*Mocker, error) {
 		srcPkg:  srcPkg,
 		pkgName: pkgName,
 		pkgPath: pkgPath,
-		fmter:   fmter,
-		imports: make(map[string]bool),
+		aliases: extractAliases(srcPkg),
+		imports: make(map[string]string),
 	}, nil
+}
+
+func preventZeroStr(val, defaultVal string) string {
+	if val == "" {
+		return defaultVal
+	}
+	return val
+}
+
+func extractAliases(pkg *packages.Package) map[string]string {
+	aliases := make(map[string]string)
+	for _, syntax := range pkg.Syntax {
+		for _, imprt := range syntax.Imports {
+			if imprt.Name != nil {
+				aliases[strings.Trim(imprt.Path.Value, `"`)] = imprt.Name.Name
+			}
+		}
+	}
+	return aliases
 }
 
 func findPkgPath(pkgInputVal string, srcPkg *packages.Package) (string, error) {
@@ -108,8 +128,6 @@ func (m *Mocker) Mock(w io.Writer, names ...string) error {
 		Imports:     moqImports,
 	}
 
-	mocksMethods := false
-
 	tpkg := m.srcPkg.Types
 	for _, name := range names {
 		n, mockName := parseInterfaceName(name)
@@ -126,7 +144,7 @@ func (m *Mocker) Mock(w io.Writer, names ...string) error {
 			MockName:      mockName,
 		}
 		for i := 0; i < iiface.NumMethods(); i++ {
-			mocksMethods = true
+			m.imports["sync"] = "sync"
 			meth := iiface.Method(i)
 			sig := meth.Type().(*types.Signature)
 			method := &method{
@@ -139,17 +157,13 @@ func (m *Mocker) Mock(w io.Writer, names ...string) error {
 		doc.Objects = append(doc.Objects, obj)
 	}
 
-	if mocksMethods {
-		doc.Imports = append(doc.Imports, "sync")
-	}
-
-	for pkgToImport := range m.imports {
-		doc.Imports = append(doc.Imports, stripVendorPath(pkgToImport))
+	for pkgName, pkgToImport := range m.imports {
+		doc.Imports = append(doc.Imports, makeImportLine(pkgName, pkgToImport))
 	}
 
 	if tpkg.Name() != m.pkgName {
 		doc.SourcePackagePrefix = tpkg.Name() + "."
-		doc.Imports = append(doc.Imports, stripVendorPath(tpkg.Path()))
+		doc.Imports = append(doc.Imports, `"`+stripVendorPath(tpkg.Path())+`"`)
 	}
 
 	var buf bytes.Buffer
@@ -167,6 +181,13 @@ func (m *Mocker) Mock(w io.Writer, names ...string) error {
 	return nil
 }
 
+func makeImportLine(pkgName, pkgToImport string) string {
+	if strings.HasSuffix(pkgToImport, pkgName) {
+		return `"` + stripVendorPath(pkgToImport) + `"`
+	}
+	return fmt.Sprintf(`%s "%s"`, pkgName, stripVendorPath(pkgToImport))
+}
+
 func (m *Mocker) packageQualifier(pkg *types.Package) string {
 	if m.pkgPath != "" && m.pkgPath == pkg.Path() {
 		return ""
@@ -178,8 +199,19 @@ func (m *Mocker) packageQualifier(pkg *types.Package) string {
 			path = stripGopath(wd)
 		}
 	}
-	m.imports[path] = true
-	return pkg.Name()
+	name := m.aliases[path]
+	if name == "" {
+		name = pkg.Name()
+	}
+	for i := 1; ; i++ {
+		if p, exists := m.imports[name]; exists && p != path {
+			name = fmt.Sprintf("%s%d", pkg.Name(), i)
+		} else {
+			break
+		}
+	}
+	m.imports[name] = path
+	return name
 }
 
 func (m *Mocker) extractArgs(sig *types.Signature, list *types.Tuple, nameFormat string) []*param {
